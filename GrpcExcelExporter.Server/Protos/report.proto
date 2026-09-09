@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+option csharp_namespace = "GrpcExcelExporter.Protos";
+
+package reporting;
+
+// Servis tanımı
+service ReportService {
+  // Server-Streaming: İstemci tek istek atar, sunucu 'stream' döner
+  rpc StreamAuditLogs (ReportRequest) returns (stream AuditLogStreamResponse);
+}
+
+// İstemcinin göndereceği parametre
+message ReportRequest {
+  int32 record_count = 1;
+}
+
+// Sunucunun akıtacağı satır verisi
+message AuditLogStreamResponse {
+  int64 id = 1;
+  string transaction_id = 2;
+  int32 user_id = 3;
+  double amount = 4;
+  int32 status_code = 5;
+  string created_date = 6;
+  string description = 7;
+}
