@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="GrpcExcelExporter.Client/GrpcExcelExporter.Client.csproj" />
+  <Project Path="GrpcExcelExporter.Server/GrpcExcelExporter.Server.csproj" />
+</Solution>
