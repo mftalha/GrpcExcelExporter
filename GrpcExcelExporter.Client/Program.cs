@@ -25,6 +25,41 @@ await writer.WriteLineAsync("Id,TransactionId,UserId,Amount,StatusCode,CreatedDa
 
 using var call = client.StreamAuditLogs(request);
 int processedRows = 0;
+var stringBuilder = new StringBuilder(1000 * 128); // Allocation azaltmak için önceden boyutlandırılmış buffer
+
+await foreach (var batch in call.ResponseStream.ReadAllAsync())
+{
+    stringBuilder.Clear();
+
+    foreach (var row in batch.Items)
+    {
+        stringBuilder.Append(row.Id).Append(',')
+                     .Append(row.TransactionId).Append(',')
+                     .Append(row.UserId).Append(',')
+                     .Append(row.Amount).Append(',')
+                     .Append(row.StatusCode).Append(',')
+                     .Append(row.CreatedDate).Append(",\"")
+                     .Append(row.Description).AppendLine("\"");
+    }
+
+    // 1.000 satırlık bloğu diske tek seferde yaz
+    await writer.WriteAsync(stringBuilder.ToString());
+
+    processedRows += batch.Items.Count;
+
+    if (processedRows % 500000 == 0)
+    {
+        Console.WriteLine($"[{stopwatch.Elapsed.TotalSeconds:F2}s] Aktarılan Satır: {processedRows:N0}");
+    }
+}
+
+/*
+// StreamAuditLogs metodu ile sunucudan veri akışı başlatılıyor =>
+// gRPC kütüphanesi HTTP/2 protokolü üzerinden sunucuya gizlice şu yönlendirme path'ini (URL uzantısını) gönderir:
+// POST /reporting.ReportService/StreamAuditLogs
+// ReportServiceImpl sınıfındaki StreamAuditLogs metodu tetiklenir ve sunucu tarafında SQL Server'dan veriler stream edilir.
+using var call = client.StreamAuditLogs(request);
+int processedRows = 0;
 
 // IAsyncEnumerable mantığı ile veriyi geldikçe diske yazıyoruz (Memory $O(1)$)
 await foreach (var row in call.ResponseStream.ReadAllAsync())
@@ -38,6 +73,8 @@ await foreach (var row in call.ResponseStream.ReadAllAsync())
         Console.WriteLine($"[{stopwatch.Elapsed.TotalSeconds:F2}s] Aktarılan Satır: {processedRows:N0}");
     }
 }
+
+*/
 
 stopwatch.Stop();
 

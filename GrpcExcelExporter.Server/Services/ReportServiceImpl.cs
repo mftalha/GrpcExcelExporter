@@ -2,6 +2,7 @@
 using GrpcExcelExporter.Protos;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using System.Diagnostics;
 
 namespace GrpcExcelExporter.Server.Services;
 
@@ -15,6 +16,63 @@ public class ReportServiceImpl : ReportService.ReportServiceBase
             ?? throw new ArgumentNullException(nameof(configuration));
     }
 
+    public override async Task StreamAuditLogs(
+    ReportRequest request,
+    IServerStreamWriter<AuditLogBatchResponse> responseStream,
+    ServerCallContext context)
+    {
+        const string query = """
+        SELECT TOP (@RecordCount) 
+            Id, TransactionId, UserId, Amount, StatusCode, CreatedDate, Description 
+        FROM AuditLogs WITH (NOLOCK)
+        ORDER BY Id ASC
+        """;
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(context.CancellationToken);
+
+        await using var command = new SqlCommand(query, connection);
+        command.Parameters.Add("@RecordCount", SqlDbType.Int).Value = request.RecordCount;
+
+        await using var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, context.CancellationToken);
+
+        var batch = new AuditLogBatchResponse();
+        const int batchSize = 1000;
+        const int timeoutMs = 500; // 500 milisaniye (0.5 saniye)
+
+        // Zamanlayıcıyı başlatıyoruz (Allocation gerektirmez, struct tabanlıdır ve çok hızlıdır)
+        var timer = Stopwatch.StartNew();
+
+        while (await reader.ReadAsync(context.CancellationToken))
+        {
+            batch.Items.Add(new AuditLogStreamResponse
+            {
+                Id = reader.GetInt64(0),
+                TransactionId = reader.GetGuid(1).ToString(),
+                UserId = reader.GetInt32(2),
+                Amount = (double)reader.GetDecimal(3),
+                StatusCode = reader.GetInt32(4),
+                CreatedDate = reader.GetDateTime(5).ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                Description = reader.GetString(6)
+            });
+
+            // MİMARİ DOKUNUŞ: Limit 1000'e ulaştıysa VEYA 500ms süre dolduysa paketi yolla!
+            if (batch.Items.Count >= batchSize || timer.ElapsedMilliseconds >= timeoutMs)
+            {
+                await responseStream.WriteAsync(batch);
+                batch.Items.Clear();
+                timer.Restart(); // Paketi gönderdikten sonra zamanlayıcıyı sıfırla
+            }
+        }
+
+        // Kalan son parçayı gönder
+        if (batch.Items.Count > 0)
+        {
+            await responseStream.WriteAsync(batch);
+        }
+    }
+
+    /*
     public override async Task StreamAuditLogs(
         ReportRequest request,
         IServerStreamWriter<AuditLogStreamResponse> responseStream,
@@ -53,4 +111,5 @@ public class ReportServiceImpl : ReportService.ReportServiceBase
             await responseStream.WriteAsync(responseBuffer);
         }
     }
+    */
 }

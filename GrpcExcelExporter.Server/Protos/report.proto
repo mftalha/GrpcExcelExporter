@@ -4,6 +4,38 @@ option csharp_namespace = "GrpcExcelExporter.Protos";
 
 package reporting;
 
+service ReportService {
+  rpc StreamAuditLogs (ReportRequest) returns (stream AuditLogBatchResponse);
+}
+
+message ReportRequest {
+  int32 record_count = 1;
+}
+
+message AuditLogStreamResponse {
+  int64 id = 1;
+  string transaction_id = 2;
+  int32 user_id = 3;
+  double amount = 4;
+  int32 status_code = 5;
+  string created_date = 6;
+  string description = 7;
+}
+
+// 1.000'erli paket yanıtı
+message AuditLogBatchResponse {
+  repeated AuditLogStreamResponse items = 1;
+}
+
+
+/*
+
+syntax = "proto3";
+
+option csharp_namespace = "GrpcExcelExporter.Protos";
+
+package reporting;
+
 // Servis tanımı
 service ReportService {
   // Server-Streaming: İstemci tek istek atar, sunucu 'stream' döner
@@ -25,3 +57,5 @@ message AuditLogStreamResponse {
   string created_date = 6;
   string description = 7;
 }
+
+*/
