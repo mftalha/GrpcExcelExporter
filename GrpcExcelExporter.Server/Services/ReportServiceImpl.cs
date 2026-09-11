@@ -34,11 +34,14 @@ public class ReportServiceImpl : ReportService.ReportServiceBase
         await using var command = new SqlCommand(query, connection);
         command.Parameters.Add("@RecordCount", SqlDbType.Int).Value = request.RecordCount;
 
+        // burda  CommandBehavior.SequentialAccess kullanıyoruz çünkü veriyi LOH'a yüklemeden stream ediyoruz
         await using var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, context.CancellationToken);
 
         var batch = new AuditLogBatchResponse();
         const int batchSize = 1000;
         const int timeoutMs = 500; // 500 milisaniye (0.5 saniye)
+        batch.Items.Capacity = batchSize; // İlk genişleme kopyalamalarını da engeller
+        
 
         // Zamanlayıcıyı başlatıyoruz (Allocation gerektirmez, struct tabanlıdır ve çok hızlıdır)
         var timer = Stopwatch.StartNew();
@@ -54,6 +57,8 @@ public class ReportServiceImpl : ReportService.ReportServiceBase
                 StatusCode = reader.GetInt32(4),
                 CreatedDate = reader.GetDateTime(5).ToString("yyyy-MM-dd HH:mm:ss.fff"),
                 Description = reader.GetString(6)
+                // içerik NVARCHAR(MAX) veya VARCHAR(MAX) osla idi ve ~40.000 karakteri (~85 KB) i geçme durumu olsa idi alttaki gibi kullanmalıydık:
+                // Description = reader.GetTextReader(6) // eğerki 85 kb den az ilse loh a düşmüyorsa buna gerek yok gereksiz masraf o zaman.
             });
 
             // MİMARİ DOKUNUŞ: Limit 1000'e ulaştıysa VEYA 500ms süre dolduysa paketi yolla!
